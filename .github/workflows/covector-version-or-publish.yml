@@ -6,48 +6,64 @@ on:
       - master
 
 jobs:
-  status:
+  version-or-release:
     runs-on: ubuntu-latest
     outputs:
       status: ${{ steps.covector.outputs.status }}
       version: ${{ steps.new-version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
 
     steps:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0 # required for use of git history
       - name: covector status
-        uses: jbolda/covector/packages/action@5797e792f532ad9bcb40c19cda080ca7713c0d91
+        uses: jbolda/covector/packages/action@feat/github-release-existing
         id: covector
         with:
           command: "status"
+      - name: git config
+        if: ${{ steps.covector.outputs.status != 'No changes.' }}
+        run: |
+          git config --global user.name "${{ github.event.pusher.name }}"
+          git config --global user.email "${{ github.event.pusher.email }}"
+      - name: covector version
+        uses: jbolda/covector/packages/action@feat/github-release-existing
+        if: ${{ steps.covector.outputs.status != 'No changes.' }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          command: "version"
+          createRelease: true
+      - name: Create Pull Request With Versions Bumped
+        id: cpr
+        uses: peter-evans/create-pull-request@v3
+        if: ${{ steps.covector.outputs.status != 'No changes.' }}
+        with:
+          title: "Publish New Versions"
+          commit-message: "publish new versions"
+          labels: "version updates"
+          branch: "release"
+          body: ${{ steps.covector.outputs.change }}
       - name: get new version
+        if: ${{ needs.status.outputs.status == 'No changes.' }}
         id: new-version
         run: |
           echo "::set-output name=version::$(cargo read-manifest | jq .version | tr -d '\"')"
-  start-release:
-    needs: status
-    if: ${{ needs.status.outputs.status == 'No changes.' }}
-    name: Initialize Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - uses: actions/checkout@v2
-      - name: Create Release
+      - name: create release
+        if: ${{ needs.status.outputs.status == 'No changes.' }}
         id: create_release
         uses: softprops/action-gh-release@9729932bfb75c05ad1f6e3a729294e05abaa7001
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: netlify_deploy-v${{ needs.status.outputs.version }}
-          name: v${{ needs.status.outputs.version }}
-          body: |
-            New version built with Covector
+          tag_name: v${{ steps.new-version.outputs.version }}
+          name: v${{ steps.new-version.outputs.version }}
+          body: ""
           draft: true
+
   build-binaries:
-    needs: [start-release, status]
+    needs: [version-or-release]
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -73,9 +89,9 @@ jobs:
         run: |
           if [[ "${{matrix.platform}}" == "macos" ]]; then
               brew install gnu-tar
-              gtar -C target -cvzf netlify-deploy-${{matrix.platform}}-${{ needs.status.outputs.version }}.tar.gz release/${{matrix.target}}
+              gtar -C target -cvzf netlify-deploy-${{matrix.platform}}-${{ needs.version-or-release.outputs.version }}.tar.gz release/${{matrix.target}}
           else
-              tar -C target -cvzf netlify-deploy-${{matrix.platform}}-${{ needs.status.outputs.version }}.tar.gz release/${{matrix.target}}
+              tar -C target -cvzf netlify-deploy-${{matrix.platform}}-${{ needs.version-or-release.outputs.version }}.tar.gz release/${{matrix.target}}
           fi
         shell: bash
       - name: Upload Release Asset
@@ -84,9 +100,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.start-release.outputs.upload_url }}
-          asset_path: netlify-deploy-${{matrix.platform}}-${{ needs.status.outputs.version }}.tar.gz
-          asset_name: netlify-deploy-${{matrix.platform}}-${{ needs.status.outputs.version }}.tar.gz
+          upload_url: ${{ needs.version-or-release.outputs.upload_url }}
+          asset_path: netlify-deploy-${{matrix.platform}}-${{ needs.version-or-release.outputs.version }}.tar.gz
+          asset_name: netlify-deploy-${{matrix.platform}}-${{ needs.version-or-release.outputs.version }}.tar.gz
           asset_content_type: application/octet-stream
       - name: Publish GH Release
         uses: actions/github-script@v3
@@ -96,52 +112,14 @@ jobs:
             github.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: "${{ needs.start-release.outputs.release_id }}",
+              release_id: "${{ needs.version-or-release.outputs.release_id }}",
               draft: false,
             });
-  version:
-    needs: status
-    if: ${{ needs.status.outputs.status != 'No changes.' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 65
-    outputs:
-      change: ${{ steps.covector.outputs.change }}
-      commandRan: ${{ steps.covector.outputs.commandRan }}
-      successfulPublish: ${{ steps.covector.outputs.successfulPublish }}
 
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0 # required for use of git history
-      - name: git config
-        run: |
-          git config --global user.name "${{ github.event.pusher.name }}"
-          git config --global user.email "${{ github.event.pusher.email }}"
-      - name: covector version or publish (publish when no change files present)
-        uses: jbolda/covector/packages/action@covector-v0
-        id: covector
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          command: "version-or-publish"
-          createRelease: true
-      - name: Create Pull Request With Versions Bumped
-        id: cpr
-        uses: peter-evans/create-pull-request@v3
-        if: ${{ steps.covector.outputs.commandRan == 'version' }}
-        with:
-          title: "Publish New Versions"
-          commit-message: "publish new versions"
-          labels: "version updates"
-          branch: "release"
-          body: ${{ steps.covector.outputs.change }}
   publish:
-    needs: [start-release, build-binaries]
+    needs: [build-binaries]
     runs-on: ubuntu-latest
     timeout-minutes: 65
-    outputs:
-      change: ${{ steps.covector.outputs.change }}
-      commandRan: ${{ steps.covector.outputs.commandRan }}
-      successfulPublish: ${{ steps.covector.outputs.successfulPublish }}
 
     steps:
       - uses: actions/checkout@v2
@@ -152,11 +130,11 @@ jobs:
           git config --global user.name "${{ github.event.pusher.name }}"
           git config --global user.email "${{ github.event.pusher.email }}"
       - name: covector version or publish (publish when no change files present)
-        uses: jbolda/covector/packages/action@covector-v0
+        uses: jbolda/covector/packages/action@feat/github-release-existing
         id: covector
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          command: "version-or-publish"
+          command: "publish"
           createRelease: false
       - name: Publish GH Release
         uses: actions/github-script@v3
