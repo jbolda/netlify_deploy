@@ -10,7 +10,8 @@
   "packages": {
     "netlify_deploy": {
       "path": ".",
-      "manager": "rust"
+      "manager": "rust",
+      "releaseTag": "v${ pkgFile.version }"
     }
   }
 }
