@@ -28,13 +28,13 @@ jobs:
           COVECTOR_CONTEXT: ${{ toJson(steps.covector) }}
         run: echo "$COVECTOR_CONTEXT"
       - name: git config
-        if: ${{ steps.covector.outputs.willPublish != 'true' }}
+        if: ${{ steps.covector.outputs.status != 'No changes.' }}
         run: |
           git config --global user.name "${{ github.event.pusher.name }}"
           git config --global user.email "${{ github.event.pusher.email }}"
       - name: covector version
         uses: jbolda/covector/packages/action@feat/github-release-existing
-        if: ${{ steps.covector.outputs.willPublish != 'true' }}
+        if: ${{ steps.covector.outputs.status != 'No changes.' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           command: "version"
@@ -42,7 +42,7 @@ jobs:
       - name: Create Pull Request With Versions Bumped
         id: cpr
         uses: peter-evans/create-pull-request@v3
-        if: ${{ steps.covector.outputs.willPublish != 'true' }}
+        if: ${{ steps.covector.outputs.status != 'No changes.' }}
         with:
           title: "Publish New Versions"
           commit-message: "publish new versions"
