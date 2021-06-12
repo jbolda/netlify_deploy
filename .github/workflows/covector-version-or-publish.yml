@@ -52,8 +52,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.new-version.outputs.version }}
-          name: v${{ steps.new-version.outputs.version }}
+          tag_name: v${{ steps.covector.outputs.version-netlify_deploy }}
+          name: v${{ steps.covector.outputs.version-netlify_deploy }}
           body: ""
           draft: true
 
