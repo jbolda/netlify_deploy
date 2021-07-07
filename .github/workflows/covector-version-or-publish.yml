@@ -9,8 +9,8 @@ jobs:
   version-or-release:
     runs-on: ubuntu-latest
     outputs:
-      willPublish: ${{ steps.covector.outputs.willPublish-netlify_deploy }}
-      version: ${{ steps.covector.outputs.version-netlify_deploy }}
+      willPublish: ${{ steps.covector.outputs.willPublish-netlify-deploy }}
+      version: ${{ steps.covector.outputs.version-netlify-deploy }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       release_id: ${{ steps.create_release.outputs.id }}
 
@@ -50,14 +50,14 @@ jobs:
           branch: "release"
           body: ${{ steps.covector.outputs.change }}
       - name: create release
-        if: steps.covector.outputs.willPublish-netlify_deploy
+        if: steps.covector.outputs.willPublish-netlify-deploy
         id: create_release
         uses: softprops/action-gh-release@9729932bfb75c05ad1f6e3a729294e05abaa7001
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.covector.outputs.version-netlify_deploy }}
-          name: v${{ steps.covector.outputs.version-netlify_deploy }}
+          tag_name: v${{ steps.covector.outputs.version-netlify-deploy }}
+          name: v${{ steps.covector.outputs.version-netlify-deploy }}
           body: ""
           draft: true
 
