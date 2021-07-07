@@ -3,7 +3,7 @@
   "pkgManagers": {
     "rust": {
       "version": true,
-      "getPublishedVersion": "git log v0.3.0 -1 --pretty=%Cgreen${ pkgFile.version } || echo \"not published yet\"",
+      "getPublishedVersion": "git log ${ pkgFile.version } -1 --pretty=%Cgreen${ pkgFile.version } || echo \"not published yet\"",
       "publish": "echo boop"
     }
   },
